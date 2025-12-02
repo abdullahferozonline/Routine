@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Offline Expense Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing:border-box; }
+    body {
+      background:#0f172a;
+      color:#e5e7eb;
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      margin:0;
+      padding:0;
+    }
+    .hidden { display:none !important; }
+
+    /* Fullscreen overlays */
+    .fullscreen-screen {
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:50;
+    }
+    #pin-screen {
+      background:#020617;
+    }
+    #welcome-screen {
+      background:radial-gradient(circle at top, #ef4444 0, #7f1d1d 35%, #020617 100%);
+    }
+
+    .pin-card, .welcome-card {
+      max-width:320px;
+      width:90%;
+      background:#020617;
+      border-radius:16px;
+      padding:16px 18px 18px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.6);
+      border:1px solid #1f2937;
+    }
+    .welcome-card {
+      background:transparent;
+      border:none;
+      box-shadow:none;
+      text-align:center;
+      color:#fee2e2;
+      animation:popin 0.7s ease-out;
+    }
+    .welcome-logo {
+      width:64px;
+      height:64px;
+      border-radius:999px;
+      border:2px solid #fecaca;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:30px;
+      font-weight:700;
+      margin:0 auto 10px;
+      background:rgba(15,23,42,0.35);
+    }
+    .welcome-title {
+      font-size:22px;
+      font-weight:700;
+      margin-bottom:4px;
+    }
+    .welcome-sub {
+      font-size:13px;
+      opacity:.9;
+    }
+    .fullscreen-fade {
+      opacity:1;
+      transition:opacity .6s ease-out;
+    }
+    .fullscreen-fade.fading-out {
+      opacity:0;
+    }
+
+    @keyframes popin {
+      from { opacity:0; transform:scale(.8) translateY(10px); }
+      to   { opacity:1; transform:scale(1) translateY(0); }
+    }
+
+    /* Main app container */
+    .container {
+      max-width:640px;
+      margin:0 auto;
+      padding:16px;
+      opacity:0;
+      transform:translateY(16px);
+      transition:opacity .45s ease-out, transform .45s ease-out;
+    }
+    .container.app-visible {
+      opacity:1;
+      transform:translateY(0);
+    }
+
+    h1 {
+      text-align:center;
+      margin-bottom:12px;
+      font-size:22px;
+    }
+    .card {
+      background:#020617;
+      border-radius:12px;
+      padding:12px;
+      margin-bottom:12px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.6);
+      border:1px solid #1f2937;
+    }
+    label {
+      font-size:13px;
+      display:block;
+      margin-top:8px;
+      margin-bottom:2px;
+    }
+    input, select, button {
+      width:100%;
+      padding:8px;
+      margin-bottom:4px;
+      border-radius:8px;
+      border:1px solid #374151;
+      background:#020617;
+      color:#e5e7eb;
+      font-size:14px;
+    }
+    input:focus, select:focus {
+      outline:none;
+      border-color:#22c55e;
+    }
+    button {
+      background:#22c55e;
+      border:none;
+      font-weight:600;
+      margin-top:8px;
+      cursor:pointer;
+    }
+    button.delete {
+      background:#ef4444;
+      font-size:12px;
+      padding:4px 8px;
+      width:auto;
+    }
+    button.secondary {
+      background:#0ea5e9;
+      width:auto;
+      font-size:12px;
+      padding:4px 8px;
+      margin-left:4px;
+    }
+    .row {
+      display:flex;
+      gap:8px;
+    }
+    .row > div {
+      flex:1;
+    }
+    .total-box {
+      font-size:16px;
+      font-weight:bold;
+      text-align:right;
+    }
+    table {
+      width:100%;
+      border-collapse:collapse;
+      margin-top:8px;
+    }
+    th, td {
+      padding:6px 4px;
+      font-size:13px;
+      border-bottom:1px solid #1f2937;
+      vertical-align:top;
+    }
+    th {
+      text-align:left;
+      color:#9ca3af;
+    }
+    .amount {
+      text-align:right;
+      white-space:nowrap;
+    }
+    .date {
+      font-size:11px;
+      color:#9ca3af;
+    }
+    .category {
+      font-size:11px;
+      color:#a5b4fc;
+    }
+    .no-data {
+      text-align:center;
+      padding:12px;
+      color:#9ca3af;
+      font-size:13px;
+    }
+    .top-filters {
+      display:flex;
+      gap:8px;
+      margin-bottom:4px;
+    }
+    .top-filters select {
+      font-size:13px;
+    }
+    .footer-note {
+      margin-top:10px;
+      font-size:11px;
+      color:#6b7280;
+      text-align:center;
+    }
+    .pill {
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      background:#1e293b;
+      font-size:11px;
+      color:#e5e7eb;
+    }
+    .header-row {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:6px;
+    }
+    canvas {
+      background:#020617;
+      border:1px solid #1f2937;
+      border-radius:12px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen" class="fullscreen-screen fullscreen-fade">
+  <div class="pin-card">
+    <h2 style="text-align:center;margin-top:0;">Enter PIN</h2>
+    <p style="font-size:12px;color:#9ca3af;text-align:center;margin-top:-4px;">
+      First time? I’ll ask you to set a PIN after load.
+    </p>
+    <label for="pin-input">PIN</label>
+    <input type="password" id="pin-input" maxlength="12" placeholder="Enter your PIN">
+    <button id="unlock-btn">Unlock</button>
+    <button id="reset-pin-btn" class="delete" type="button">Reset PIN</button>
+  </div>
+</div>
+
+<!-- WELCOME ANIMATION -->
+<div id="welcome-screen" class="fullscreen-screen fullscreen-fade hidden">
+  <div class="welcome-card">
+    <div class="welcome-logo">₹</div>
+    <div class="welcome-title">Expense Tracker</div>
+    <div class="welcome-sub">Welcome, <span id="user-name">User</span></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" class="container hidden">
+  <h1>Offline Expense Tracker</h1>
+
+  <!-- Filters -->
+  <div class="card">
+    <div class="header-row">
+      <div class="pill">Filter</div>
+      <button id="this-month-btn" class="secondary" type="button">This Month</button>
+    </div>
+    <form id="filter-form">
+      <div class="top-filters">
+        <div>
+          <label for="filterMonth">Month</label>
+          <select id="filterMonth"></select>
+        </div>
+        <div>
+          <label for="filterYear">Year</label>
+          <select id="filterYear"></select>
+        </div>
+      </div>
+      <button type="submit">Apply Filter</button>
+    </form>
+  </div>
+
+  <!-- Add Expense -->
+  <div class="card">
+    <div class="header-row">
+      <div class="pill">Add Expense</div>
+      <button id="clear-form-btn" class="secondary" type="button">Clear</button>
+    </div>
+    <form id="add-form">
+      <label for="title">Title</label>
+      <input id="title" name="title" placeholder="e.g. Lunch, Petrol" required>
+
+      <label for="amount">Amount (₹)</label>
+      <input id="amount" name="amount" type="number" step="0.01" min="0" required>
+
+      <div class="row">
+        <div>
+          <label for="category">Category</label>
+          <input id="category" name="category" placeholder="Food, Travel, Bills">
+        </div>
+        <div>
+          <label for="date">Date</label>
+          <input id="date" name="date" type="date">
+        </div>
+      </div>
+
+      <button type="submit">Add Expense</button>
+    </form>
+  </div>
+
+  <!-- List + Total -->
+  <div class="card">
+    <div id="totalBox" class="total-box">Total: ₹0.00</div>
+    <div id="listContainer"></div>
+  </div>
+
+  <!-- Category summary -->
+  <div class="card">
+    <div class="header-row">
+      <div class="pill">Category Summary (current month)</div>
+    </div>
+    <div id="categorySummary" class="small" style="font-size:13px;"></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="card">
+    <div class="header-row">
+      <div class="pill">Expense Chart (this month)</div>
+    </div>
+    <canvas id="pieChart" width="300" height="300"
+      style="max-width:100%;margin:10px auto;display:block;"></canvas>
+
+    <canvas id="barChart" width="320" height="220"
+      style="max-width:100%;margin:10px auto;display:block;"></canvas>
+  </div>
+
+  <!-- Backup / Export -->
+  <div class="card">
+    <div class="header-row">
+      <div class="pill">Backup & Export</div>
+    </div>
+    <button id="export-csv-btn" type="button">Export CSV (this month)</button>
+    <button id="backup-btn" type="button" class="secondary">Backup JSON (all)</button>
+    <label for="restore-file" style="margin-top:8px;">Restore JSON backup</label>
+    <input type="file" id="restore-file" accept="application/json">
+  </div>
+
+  <div class="footer-note">
+    © 2025 Abdullah Feroz. All rights reserved.
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'offline_expenses_v2';
+  const PIN_KEY     = 'offline_expenses_pin_v1';
+
+  const dom = {};
+
+  function cacheDom() {
+    dom.pinScreen     = document.getElementById('pin-screen');
+    dom.welcomeScreen = document.getElementById('welcome-screen');
+    dom.pinInput      = document.getElementById('pin-input');
+    dom.unlockBtn     = document.getElementById('unlock-btn');
+    dom.resetPinBtn   = document.getElementById('reset-pin-btn');
+    dom.app           = document.getElementById('app');
+
+    dom.filterMonth   = document.getElementById('filterMonth');
+    dom.filterYear    = document.getElementById('filterYear');
+    dom.filterForm    = document.getElementById('filter-form');
+    dom.thisMonthBtn  = document.getElementById('this-month-btn');
+
+    dom.addForm       = document.getElementById('add-form');
+    dom.clearFormBtn  = document.getElementById('clear-form-btn');
+    dom.titleInput    = document.getElementById('title');
+    dom.amountInput   = document.getElementById('amount');
+    dom.categoryInput = document.getElementById('category');
+    dom.dateInput     = document.getElementById('date');
+
+    dom.totalBox        = document.getElementById('totalBox');
+    dom.listContainer   = document.getElementById('listContainer');
+    dom.categorySummary = document.getElementById('categorySummary');
+
+    dom.exportCsvBtn  = document.getElementById('export-csv-btn');
+    dom.backupBtn     = document.getElementById('backup-btn');
+    dom.restoreFile   = document.getElementById('restore-file');
+  }
+
+  function loadExpenses() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }
+
+  function saveExpenses(list) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(16).slice(2);
+  }
+
+  function initFilters() {
+    const now = new Date();
+    const currentMonth = (now.getMonth() + 1).toString().padStart(2, '0');
+    const currentYear  = now.getFullYear();
+
+    dom.filterMonth.innerHTML = '';
+    for (let m = 1; m <= 12; m++) {
+      const val = m.toString().padStart(2, '0');
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = val;
+      if (val === currentMonth) opt.selected = true;
+      dom.filterMonth.appendChild(opt);
+    }
+
+    dom.filterYear.innerHTML = '';
+    for (let y = currentYear - 3; y <= currentYear + 1; y++) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = String(y);
+      if (y === currentYear) opt.selected = true;
+      dom.filterYear.appendChild(opt);
+    }
+
+    dom.dateInput.value = now.toISOString().slice(0, 10);
+  }
+
+  function setTodayFilter() {
+    const now = new Date();
+    dom.filterMonth.value = (now.getMonth() + 1).toString().padStart(2, '0');
+    dom.filterYear.value  = String(now.getFullYear());
+    render();
+  }
+
+  function clearForm() {
+    dom.titleInput.value   = '';
+    dom.amountInput.value  = '';
+    dom.categoryInput.value= '';
+    const now = new Date();
+    dom.dateInput.value = now.toISOString().slice(0, 10);
+  }
+
+  function formatAmount(num) {
+    return num.toFixed(2);
+  }
+
+  function getFilteredExpenses() {
+    const expenses = loadExpenses();
+    const month = dom.filterMonth.value;
+    const year  = dom.filterYear.value;
+
+    return expenses.filter(exp => {
+      if (!exp.date) return false;
+      const d = new Date(exp.date);
+      const m = (d.getMonth() + 1).toString().padStart(2, '0');
+      const y = d.getFullYear().toString();
+      return m === month && y === year;
+    });
+  }
+
+  function updateCategorySummary() {
+    const filtered = getFilteredExpenses();
+    const totalsByCategory = {};
+    filtered.forEach(exp => {
+      const key = exp.category && exp.category.trim() !== '' ? exp.category.trim() : 'Uncategorized';
+      totalsByCategory[key] = (totalsByCategory[key] || 0) + Number(exp.amount || 0);
+    });
+
+    if (Object.keys(totalsByCategory).length === 0) {
+      dom.categorySummary.textContent = 'No data for this month.';
+      return;
+    }
+
+    let html = '';
+    for (const [cat, amt] of Object.entries(totalsByCategory)) {
+      html += `${cat}: ₹${formatAmount(amt)}<br>`;
+    }
+    dom.categorySummary.innerHTML = html;
+  }
+
+  // ===== Charts (pie + bar) =====
+  function drawPieChart(data){
+    const canvas = document.getElementById("pieChart");
+    if(!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const total = Object.values(data).reduce((a,b)=>a+b,0);
+    if(total === 0) return;
+
+    const cx = canvas.width/2;
+    const cy = canvas.height/2;
+    const radius = Math.min(cx, cy) - 20;
+
+    let startAngle = 0;
+    const colors = ["#ef4444","#22c55e","#3b82f6","#eab308","#a855f7","#14b8a6","#f97316","#ec4899"];
+
+    let i = 0;
+    for(const key in data){
+      const sliceAngle = (data[key]/total) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,radius,startAngle,startAngle+sliceAngle);
+      ctx.closePath();
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fill();
+      startAngle += sliceAngle;
+      i++;
+    }
+  }
+
+  function drawBarChart(data){
+    const canvas = document.getElementById("barChart");
+    if(!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const entries = Object.entries(data);
+    if(entries.length === 0) return;
+
+    const values = entries.map(([_,v])=>v);
+    const maxVal = Math.max(...values);
+
+    const chartHeight = canvas.height - 40;
+    const baseY = chartHeight + 10;
+    const barWidth = 30;
+    const gap = 15;
+
+    let x = 20;
+    entries.forEach(([cat,val])=>{
+      const barHeight = maxVal === 0 ? 0 : (val/maxVal)*chartHeight;
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(x, baseY - barHeight, barWidth, barHeight);
+
+      ctx.fillStyle = "#9ca3af";
+      ctx.font = "10px Arial";
+      ctx.save();
+      ctx.translate(x + barWidth/2, baseY + 12);
+      ctx.rotate(-Math.PI/8);
+      ctx.textAlign = "center";
+      ctx.fillText(cat,0,0);
+      ctx.restore();
+
+      x += barWidth + gap;
+    });
+  }
+
+  function updateCharts(){
+    const filtered = getFilteredExpenses();
+    const map = {};
+    filtered.forEach(e=>{
+      const c = e.category && e.category.trim() !== '' ? e.category.trim() : "Other";
+      map[c] = (map[c] || 0) + Number(e.amount || 0);
+    });
+
+    drawPieChart(map);
+    drawBarChart(map);
+  }
+  // ===== end charts =====
+
+  function render() {
+    const filtered = getFilteredExpenses();
+    const month = dom.filterMonth.value;
+    const year  = dom.filterYear.value;
+
+    const total = filtered.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    dom.totalBox.textContent = `Total (${month}/${year}): ₹${formatAmount(total)}`;
+
+    dom.listContainer.innerHTML = '';
+
+    if (filtered.length === 0) {
+      const div = document.createElement('div');
+      div.className = 'no-data';
+      div.textContent = 'No expenses found for this month.';
+      dom.listContainer.appendChild(div);
+    } else {
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      const thTitle = document.createElement('th');
+      thTitle.textContent = 'Title';
+      const thAmt = document.createElement('th');
+      thAmt.textContent = 'Amount';
+      thAmt.className = 'amount';
+      const thDel = document.createElement('th');
+      trh.appendChild(thTitle);
+      trh.appendChild(thAmt);
+      trh.appendChild(thDel);
+      thead.appendChild(trh);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+
+      filtered.forEach(exp => {
+        const tr = document.createElement('tr');
+
+        const tdTitle = document.createElement('td');
+        const titleDiv = document.createElement('div');
+        titleDiv.textContent = exp.title || '';
+        const catDiv = document.createElement('div');
+        catDiv.className = 'category';
+        catDiv.textContent = exp.category || 'Uncategorized';
+        const dateDiv = document.createElement('div');
+        dateDiv.className = 'date';
+        dateDiv.textContent = exp.date || '';
+        tdTitle.appendChild(titleDiv);
+        tdTitle.appendChild(catDiv);
+        tdTitle.appendChild(dateDiv);
+
+        const tdAmt = document.createElement('td');
+        tdAmt.className = 'amount';
+        tdAmt.textContent = '₹' + formatAmount(Number(exp.amount || 0));
+
+        const tdDel = document.createElement('td');
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete';
+        delBtn.textContent = 'X';
+        delBtn.addEventListener('click', () => {
+          if (confirm('Delete this expense?')) {
+            const all = loadExpenses().filter(e => e.id !== exp.id);
+            saveExpenses(all);
+            render();
+          }
+        });
+        tdDel.appendChild(delBtn);
+
+        tr.appendChild(tdTitle);
+        tr.appendChild(tdAmt);
+        tr.appendChild(tdDel);
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      dom.listContainer.appendChild(table);
+    }
+
+    updateCategorySummary();
+    updateCharts();
+  }
+
+  function addExpenseFromForm(event) {
+    event.preventDefault();
+    const title = dom.titleInput.value.trim();
+    const amount = parseFloat(dom.amountInput.value || '0');
+    const category = dom.categoryInput.value.trim();
+    let date = dom.dateInput.value;
+
+    if (!title || !amount || isNaN(amount) || amount <= 0) {
+      alert('Please enter a valid title and amount.');
+      return;
+    }
+    if (!date) {
+      date = new Date().toISOString().slice(0, 10);
+    }
+
+    const expenses = loadExpenses();
+    expenses.push({
+      id: generateId(),
+      title,
+      amount,
+      category,
+      date
+    });
+    saveExpenses(expenses);
+    clearForm();
+    render();
+  }
+
+  function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCsvForCurrentMonth() {
+    const filtered = getFilteredExpenses();
+    if (filtered.length === 0) {
+      alert('No expenses for this month to export.');
+      return;
+    }
+    let csv = 'Title,Amount,Category,Date\n';
+    filtered.forEach(e => {
+      const row = [
+        '"' + (e.title || '').replace(/"/g, '""') + '"',
+        e.amount,
+        '"' + (e.category || '').replace(/"/g, '""') + '"',
+        e.date || ''
+      ];
+      csv += row.join(',') + '\n';
+    });
+    const month = dom.filterMonth.value;
+    const year  = dom.filterYear.value;
+    downloadFile(csv, `expenses_${year}_${month}.csv`, 'text/csv');
+  }
+
+  function backupJsonAll() {
+    const data = loadExpenses();
+    if (data.length === 0) {
+      alert('No data to backup.');
+      return;
+    }
+    const json = JSON.stringify(data, null, 2);
+    downloadFile(json, 'expenses_backup.json', 'application/json');
+  }
+
+  function restoreFromFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!Array.isArray(parsed)) throw new Error('Invalid backup file');
+        saveExpenses(parsed);
+        alert('Backup restored successfully.');
+        render();
+      } catch (e) {
+        alert('Failed to restore backup: ' + e.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // --- PIN / welcome logic ---
+  function ensurePinExists() {
+    let storedPin = localStorage.getItem(PIN_KEY);
+    if (!storedPin) {
+      const pin = prompt('Set a PIN (4+ digits):') || '';
+      const trimmed = pin.trim();
+      if (trimmed) {
+        localStorage.setItem(PIN_KEY, trimmed);
+        alert('PIN saved. Use it on the unlock screen.');
+      } else {
+        alert('No PIN set. App will open without protection.');
+        dom.pinScreen.classList.add('hidden');
+        showAppDirect();
+      }
+    }
+  }
+
+  function initUserName() {
+    let uname = localStorage.getItem('expense_username');
+    if (!uname) {
+      uname = prompt('Enter your name:') || 'User';
+      localStorage.setItem('expense_username', uname);
+    }
+    const nameEl = document.getElementById('user-name');
+    if (nameEl) nameEl.textContent = uname;
+  }
+
+  function showAppDirect() {
+    initUserName();
+    dom.app.classList.remove('hidden');
+    dom.app.classList.add('app-visible');
+    render();
+  }
+
+  function showWelcomeThenApp() {
+    initUserName();
+    dom.pinScreen.classList.add('hidden');
+    dom.welcomeScreen.classList.remove('hidden');
+    setTimeout(() => {
+      dom.welcomeScreen.classList.add('fading-out');
+    }, 4400); // start fade at ~4.4s
+    setTimeout(() => {
+      dom.welcomeScreen.classList.add('hidden');
+      dom.app.classList.remove('hidden');
+      dom.app.classList.add('app-visible');
+      render();
+    }, 5000); // show app at ~5s
+  }
+
+  function checkPin() {
+    const storedPin = localStorage.getItem(PIN_KEY);
+    const entered   = dom.pinInput.value.trim();
+    if (!storedPin) {
+      showAppDirect();
+      return;
+    }
+    if (entered === storedPin) {
+      showWelcomeThenApp();
+    } else {
+      alert('Wrong PIN');
+    }
+  }
+
+  function resetPin() {
+    if (confirm('Reset PIN? (Does NOT delete expenses)')) {
+      localStorage.removeItem(PIN_KEY);
+      alert('PIN cleared. Reloading to set a new PIN.');
+      location.reload();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    cacheDom();
+    initFilters();
+
+    ensurePinExists();
+
+    dom.filterForm.addEventListener('submit', e => {
+      e.preventDefault();
+      render();
+    });
+
+    dom.thisMonthBtn.addEventListener('click', setTodayFilter);
+    dom.clearFormBtn.addEventListener('click', clearForm);
+    dom.addForm.addEventListener('submit', addExpenseFromForm);
+
+    dom.exportCsvBtn.addEventListener('click', exportCsvForCurrentMonth);
+    dom.backupBtn.addEventListener('click', backupJsonAll);
+    dom.restoreFile.addEventListener('change', restoreFromFile);
+
+    dom.unlockBtn.addEventListener('click', checkPin);
+    dom.resetPinBtn.addEventListener('click', resetPin);
+  });
+</script>
+
+</body>
+</html>
